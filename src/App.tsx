@@ -6,6 +6,7 @@ import {
   MapPin, 
   User, 
   Settings, 
+  Search,
   LogOut, 
   Menu, 
   X,
@@ -48,6 +49,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { fetchSocialProfile, SocialProfileData } from './services/socialService';
+import InstagramScraper from './components/InstagramScraper';
 
 // --- Components ---
 
@@ -211,6 +213,7 @@ const Navbar = ({ onOpenAuth, activeView, setView }: { onOpenAuth: () => void, a
 
   if (user) {
     navItems.push({ id: 'settings', label: 'Settings', icon: Settings });
+    navItems.push({ id: 'instagram-tool', label: 'Insta Scraper', icon: Search });
   }
 
   return (
@@ -688,7 +691,7 @@ const TrackingMap = ({ barberId, bookingId }: { barberId: string, bookingId: str
 
 // --- Main App Component ---
 
-type ViewType = 'home' | 'services' | 'bookings' | 'staff' | 'settings';
+type ViewType = 'home' | 'services' | 'bookings' | 'staff' | 'settings' | 'instagram-tool';
 
 export default function App() {
   const { user, profile, loading, isAuthReady } = useAuth();
@@ -860,6 +863,18 @@ export default function App() {
 
       <main className="relative">
         <AnimatePresence mode="wait">
+          {activeView === 'instagram-tool' && (
+            <motion.div
+              key="instagram-tool"
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -100 }}
+              transition={{ duration: 0.4 }}
+            >
+              <InstagramScraper />
+            </motion.div>
+          )}
+
           {activeView === 'settings' && (
             <motion.div
               key="settings"
