@@ -1,0 +1,6 @@
+{
+  "name": "TrimTime",
+  "description": "A premium barber shop management and booking platform with real-time home service tracking.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": []
+}

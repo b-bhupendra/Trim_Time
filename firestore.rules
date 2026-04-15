@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string
+    //   - role: string (required, ['customer', 'barber', 'admin'])
+    //   - phoneNumber: string
+    //
+    // Collection: services
+    // Document ID: {serviceId}
+    // Fields:
+    //   - name: string (required)
+    //   - price: number (required)
+    //   - duration: number (required)
+    //   - description: string
+    //   - category: string
+    //
+    // Collection: bookings
+    // Document ID: {bookingId}
+    // Fields:
+    //   - customerId: string (required)
+    //   - barberId: string (required)
+    //   - serviceId: string (required)
+    //   - date: string (required)
+    //   - time: string (required)
+    //   - status: string (required, ['pending', 'confirmed', 'completed', 'cancelled'])
+    //   - type: string (required, ['salon', 'home'])
+    //   - location: map (optional)
+    //   - createdAt: string (required)
+    //
+    // Collection: barberLocations
+    // Document ID: {barberId}
+    // Fields:
+    //   - barberId: string (required)
+    //   - lat: number (required)
+    //   - lng: number (required)
+    //   - lastUpdated: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "bhupendrarawat799@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isBarber() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'barber';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}.*");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['customer', 'barber', 'admin'];
+    }
+
+    function isValidBooking(data) {
+      return data.customerId is string && data.customerId.size() > 0 &&
+             data.barberId is string && data.barberId.size() > 0 &&
+             data.serviceId is string && data.serviceId.size() > 0 &&
+             data.status in ['pending', 'confirmed', 'completed', 'cancelled'] &&
+             data.type in ['salon', 'home'] &&
+             isValidDateString(data.date);
+    }
+
+    function isValidBarberLocation(data) {
+      return data.barberId is string &&
+             data.lat is number && data.lng is number &&
+             data.lastUpdated is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == 'customer' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.customerId || 
+        request.auth.uid == resource.data.barberId || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && isValidBooking(request.resource.data) && 
+                    (request.auth.uid == request.resource.data.customerId || isAdmin());
+      allow update: if isAuthenticated() && isValidBooking(request.resource.data) && (
+        request.auth.uid == resource.data.customerId || 
+        request.auth.uid == resource.data.barberId || 
+        isAdmin()
+      );
+    }
+
+    function hasActiveBookingWith(barberId) {
+      let bookings = queries.collection('bookings').where('customerId', '==', request.auth.uid).where('barberId', '==', barberId).where('status', 'in', ['confirmed', 'in-progress']);
+      return bookings.size() > 0;
+    }
+
+    match /barberLocations/{barberId} {
+      allow read: if isAuthenticated() && (request.auth.uid == barberId || exists(/databases/$(database)/documents/bookings/$(request.auth.uid + "_" + barberId)) || isAdmin()); // Simplified check for now as collection group queries in rules are complex
+      // Better approach: use a specific document check or a helper
+      allow write: if isAuthenticated() && (request.auth.uid == barberId || isAdmin());
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
